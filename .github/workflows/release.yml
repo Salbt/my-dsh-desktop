@@ -18,8 +18,10 @@ jobs:
           go-version: '1.25.x'
           cache: true
 
-      - name: Install NSIS
-        run: choco install nsis -y --no-progress
+      - name: Install build deps
+        run: |
+          choco install nsis -y --no-progress
+          choco install mingw -y --no-progress
 
       - name: Parse tag
         shell: pwsh
