@@ -1,0 +1,21 @@
+# Compiled Object files, Static and Dynamic libs and Executables
+*.o
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
+*.app
+*.syso
+
+# Go test artifacts
+*.test
+coverage.out
+
+# Logs
+*.log
+
+# Distribution / packaging output
+dist/
