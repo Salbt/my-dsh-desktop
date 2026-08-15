@@ -1,46 +1,70 @@
-name: Release
+# 🚀 发布流水线：推送版本标签后，自动构建 Windows 安装包并发布到 GitHub Releases。
+name: 🚀 Release
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*' # 例如：v0.1.0、v1.2.3
 
 jobs:
   build:
+    name: 🏗️ Build Windows release
     runs-on: windows-latest
     permissions:
-      contents: write
+      contents: write # 允许工作流创建 GitHub Release 并上传构建产物。
     steps:
-      - uses: actions/checkout@v4
+      # 📥 下载当前版本标签对应的项目源码。
+      - name: 📥 Checkout source
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      # 🐹 安装 Go，并启用依赖缓存以加快后续构建。
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
           cache: true
 
-      - name: Install build deps
+      # 🧰 NSIS 用于制作安装程序，MinGW 用于编译 webview_go 等 CGO 依赖。
+      - name: 🧰 Install build dependencies
+        shell: pwsh
         run: |
           choco install nsis -y --no-progress
           choco install mingw -y --no-progress
 
-      - name: Parse tag
+          # 确认 NSIS 安装成功，并让后续步骤可以直接调用 makensis。
+          $nsisDir = "${env:ProgramFiles(x86)}\NSIS"
+          if (-not (Test-Path "$nsisDir\makensis.exe")) {
+            throw "makensis.exe was not installed"
+          }
+          $nsisDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # 🏷️ 将标签 v0.1.0 转换为应用版本 0.1.0，供打包脚本使用。
+      - name: 🏷️ Parse release version
         shell: pwsh
         run: |
           $v = "${{ github.ref_name }}" -replace '^v', ''
           "APP_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Package
+      # 📦 生成便携版 ZIP、Windows 安装程序和 SHA-256 校验文件。
+      - name: 📦 Package application
         shell: pwsh
         env:
+          # 内置的 dsh CLI 版本；升级 CLI 时在这里同步修改。
           DSH_VERSION: 0.1.0-rc.6
           NPM_REGISTRY: https://registry.npmjs.org/
         run: |
           powershell -ExecutionPolicy Bypass -File scripts/package.ps1 `
             -AppVersion $env:APP_VERSION `
             -DshVersion $env:DSH_VERSION `
-            -Registry $env:NPM_REGISTRY
+            -Registry $env:NPM_REGISTRY `
+            -RequireInstaller
 
-      - name: Release
+          # 安装包是正式发布的必需产物，缺失时立即终止发布。
+          $setup = "dist/my-dsh-desktop-setup-v$env:APP_VERSION.exe"
+          if (-not (Test-Path $setup)) { throw "installer was not created: $setup" }
+
+      # 🎉 创建 GitHub Release，上传所有安装包与校验文件，并自动生成更新说明。
+      - name: 🎉 Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -48,3 +72,6 @@ jobs:
             dist/*.exe
             dist/sha256.txt
           generate_release_notes: true
+          # 带连字符的标签（例如 v0.1.1-rc.1）作为预发布，不覆盖 Latest 正式版。
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true

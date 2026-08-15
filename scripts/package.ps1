@@ -1,9 +1,11 @@
 param(
   [string]$NodeVersion = "v24.19.0",
   [string]$DshVersion = "0.1.0-rc.6",
+  [string]$PnpmVersion = "10.34.5",
   [string]$AppVersion = "0.1.0",
   [string]$Registry = "",
-  [string]$OutDir = "dist"
+  [string]$OutDir = "dist",
+  [switch]$RequireInstaller
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -60,6 +62,27 @@ if ($localDshVersion -eq $DshVersion -and (Test-Path "$localDsh\node_modules\@de
   if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
 }
 
+$pnpmDir = "$stage\runtime\pnpm"
+$pnpmCache = Join-Path $env:TEMP "dsh-pnpm-cache"
+$pnpmArgs = @(
+  $npmCli, "install", "--prefix", $pnpmDir,
+  "--no-save", "--no-package-lock", "--no-audit", "--no-fund",
+  "--cache", $pnpmCache
+)
+if ($Registry) { $pnpmArgs += @("--registry", $Registry) }
+$pnpmArgs += "pnpm@$PnpmVersion"
+Write-Host "bundle pnpm $PnpmVersion..."
+& $nodeExe $pnpmArgs
+if ($LASTEXITCODE -ne 0) { throw "pnpm install failed" }
+if (-not (Test-Path "$pnpmDir\node_modules\.bin\pnpm.cmd")) {
+  throw "pnpm.cmd not found after install"
+}
+
+$cliDir = Join-Path $stage "bin"
+New-Item -ItemType Directory -Path $cliDir -Force | Out-Null
+Copy-Item "$PSScriptRoot\cli\dsh.cmd" $cliDir
+Copy-Item "$PSScriptRoot\cli\update-path.ps1" $cliDir
+
 $zipName = "my-dsh-desktop-portable-v$AppVersion.zip"
 $zipPath = Join-Path $OutDir $zipName
 if (Test-Path $zipPath) { Remove-Item $zipPath }
@@ -77,17 +100,30 @@ $hashPath = Join-Path $OutDir "sha256.txt"
 $hash = Get-FileHash $zipPath -Algorithm SHA256
 Set-Content -Path $hashPath -Value "$($hash.Hash)  $zipName"
 
-$makensis = Get-Command makensis -ErrorAction SilentlyContinue
-if ($makensis) {
+$makensisCommand = Get-Command makensis -ErrorAction SilentlyContinue
+$makensisExe = if ($makensisCommand) { $makensisCommand.Source } else { $null }
+if (-not $makensisExe) {
+  $makensisCandidates = @(
+    "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+    "$env:ProgramFiles\NSIS\makensis.exe",
+    "$env:ProgramData\chocolatey\bin\makensis.exe"
+  )
+  $makensisPath = $makensisCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+  if ($makensisPath) { $makensisExe = $makensisPath }
+}
+if ($makensisExe) {
   $nsi = Join-Path $PSScriptRoot "nsis\installer.nsi"
   $out = Join-Path $OutDir "my-dsh-desktop-setup-v$AppVersion.exe"
-  & $makensis.Source /DVERSION=$AppVersion /DSTAGE=$stage /DOUT=$out $nsi
+  & $makensisExe /DVERSION=$AppVersion /DSTAGE=$stage /DOUT=$out $nsi
   if ($LASTEXITCODE -ne 0) { throw "makensis failed" }
   $hash = Get-FileHash $out -Algorithm SHA256
   Add-Content -Path $hashPath -Value "$($hash.Hash)  $(Split-Path $out -Leaf)"
   Write-Host "wrote $out ($([math]::Round((Get-Item $out).Length/1MB)) MB)"
 } else {
-  Write-Warning "makensis not found, skip installer"
+  if ($RequireInstaller) {
+    throw "makensis not found; NSIS is required to create the installer"
+  }
+  Write-Warning "makensis not found, skip installer (use -RequireInstaller to make this an error)"
 }
 
 Write-Host "package done"

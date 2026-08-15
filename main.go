@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -121,7 +122,7 @@ func runDsh(cfg *appcfg.Config, node *nodejs.Node, d *dsh.Dsh, log *logx.Logger,
 	if err != nil {
 		return "", nil, fmt.Errorf("获取空闲端口失败: %w", err)
 	}
-	env := envx.Merge("DSH_HOME=" + cfg.Dirs.Home)
+	env := dshEnvironment(cfg, node)
 	mgr := proc.Start(node.Exe, d.LaunchArgs(p), env, log.Printf)
 
 	status("等待服务就绪...")
@@ -137,6 +138,27 @@ func runDsh(cfg *appcfg.Config, node *nodejs.Node, d *dsh.Dsh, log *logx.Logger,
 	}
 	log.Printf("DeepSeek Harness 已就绪: %s", url)
 	return url, mgr, nil
+}
+
+func dshEnvironment(cfg *appcfg.Config, node *nodejs.Node) []string {
+	pathParts := []string{
+		filepath.Dir(node.Exe),
+		filepath.Join(filepath.Dir(cfg.Dirs.Runtime), "bin"),
+		filepath.Join(cfg.Dirs.Pnpm, "node_modules", ".bin"),
+	}
+	if current := os.Getenv("PATH"); current != "" {
+		pathParts = append(pathParts, current)
+	}
+	extra := []string{
+		"DSH_HOME=" + cfg.Dirs.Home,
+		"PATH=" + strings.Join(pathParts, string(os.PathListSeparator)),
+		"NPM_CONFIG_CACHE=" + cfg.Dirs.NpmCache,
+		"NPM_CONFIG_STORE_DIR=" + filepath.Join(cfg.Dirs.NpmCache, "pnpm-store"),
+	}
+	if cfg.Registry != "" {
+		extra = append(extra, "NPM_CONFIG_REGISTRY="+cfg.Registry)
+	}
+	return envx.Merge(extra...)
 }
 
 func startUpdate(cfg *appcfg.Config, log *logx.Logger, win *ui.UI) {

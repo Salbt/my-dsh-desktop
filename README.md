@@ -28,7 +28,7 @@
 | 产物 | 适合 |
 |---|---|
 | `my-dsh-desktop-portable-v<版本>.zip`（约 117MB） | 免安装、绿色携带、数据自包含 |
-| `my-dsh-desktop-setup-v<版本>.exe` | 标准安装：开始菜单、桌面快捷方式、卸载器 |
+| `my-dsh-desktop-setup-v<版本>.exe` | 标准安装：开始菜单、桌面快捷方式、命令行入口、卸载器 |
 
 > 发布物未签名，SmartScreen 提示时选择"仍要运行"。
 
@@ -40,11 +40,30 @@
 
 之后就是原汁原味的 DeepSeek Harness：模型配置、插件、审批策略……所有文档均与官方一致。
 
+## 命令行与插件
+
+安装版会把 `dsh` 命令加入系统 `PATH`。安装完成后打开一个新的 PowerShell，即可执行：
+
+```powershell
+dsh --version
+dsh plugin --profile web add <插件包名>
+```
+
+便携版不会修改系统环境变量，请从解压目录调用随包提供的命令入口：
+
+```powershell
+.\bin\dsh.cmd --version
+.\bin\dsh.cmd plugin --profile web add <插件包名>
+```
+
+插件安装在当前发行形态的数据目录下，安装后重启 Desktop 即可加载。命令入口使用发布包内置的 Node.js 与 pnpm，不要求系统另行安装。
+
 ## 数据布局
 
 ```
 便携版 — 全部在解压目录（整体删除即卸载）:
 ├── my-dsh-desktop.exe   # 程序
+├── bin\dsh.cmd          # 命令行入口
 ├── runtime\             # 内置 Node 24 + Harness
 ├── home\                # 配置 / 插件 / 密钥
 ├── npm-cache\           # 更新用的私有缓存
@@ -76,9 +95,10 @@
 # 开发构建（无内置运行时，首启自动下载）
 powershell -ExecutionPolicy Bypass -File build.ps1
 
-# 发布打包（便携 zip + NSIS 安装包，需 makensis，未安装时自动跳过）
+# 发布打包（便携 zip + NSIS 安装包，需 makensis）
 powershell -ExecutionPolicy Bypass -File scripts\package.ps1 `
-  -AppVersion 0.1.0 -NodeVersion v24.19.0 -DshVersion 0.1.0-rc.6
+  -AppVersion 0.1.0 -NodeVersion v24.19.0 -DshVersion 0.1.0-rc.6 `
+  -PnpmVersion 10.34.5 -RequireInstaller
 ```
 
 推送 `v*` tag 触发 GitHub Actions 自动构建并发布 Release。
