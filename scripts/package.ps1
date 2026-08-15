@@ -11,6 +11,13 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+# NSIS resolves a relative OutFile against the .nsi script directory. Normalize
+# the output directory here so ZIP and installer paths always target the repo.
+if (-not [IO.Path]::IsPathRooted($OutDir)) {
+  $OutDir = Join-Path $root $OutDir
+}
+$OutDir = [IO.Path]::GetFullPath($OutDir)
+
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 
 & "$PSScriptRoot\..\build.ps1"
