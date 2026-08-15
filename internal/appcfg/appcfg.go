@@ -11,6 +11,7 @@ type Dirs struct {
 	Runtime    string
 	Node       string
 	Dsh        string
+	Pnpm       string
 	Home       string
 	Logs       string
 	NpmCache   string
@@ -61,6 +62,7 @@ func Load() (*Config, error) {
 			Runtime:    runtime,
 			Node:       filepath.Join(runtime, "node"),
 			Dsh:        filepath.Join(runtime, "dsh"),
+			Pnpm:       filepath.Join(runtime, "pnpm"),
 			Home:       filepath.Join(data, "home"),
 			Logs:       filepath.Join(data, "logs"),
 			NpmCache:   filepath.Join(data, "npm-cache"),
